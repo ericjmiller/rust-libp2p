@@ -505,14 +505,39 @@ mod tests {
     use libp2p_core::{Transport, multiaddr::{Multiaddr, Protocol}, transport::ListenerEvent};
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use super::multiaddr_to_socketaddr;
+    use std::error::Error;
+    use std::io;
+
     #[cfg(feature = "async-std")]
     use super::TcpConfig;
+    #[cfg(feature = "tokio")]
+    use super::TokioTcpConfig;
+
+    // macro_rules! config {
+    //
+    // }
+    // fn config() -> Result<Transport, io::Error> {
+    //
+    // }Error
+    fn feature_config() -> Result<Transport, io::Error> {
+        if cfg!(feature = "tokio") {
+            TokioTcpConfig
+        } else if cfg!(feature = "async-std") {
+            TcpConfig
+        } else {
+            io::Error("No Feature set.")
+        }
+    }
+
 
     #[test]
     #[cfg(feature = "async-std")]
+    #[cfg(feature = "tokio")]
     fn wildcard_expansion() {
         fn test(addr: Multiaddr) {
-            let mut listener = TcpConfig::new().listen_on(addr).expect("listener");
+            let config: Transport = feature_config()?;
+            // let mut listener = TcpConfig::new().listen_on(addr).expect("listener");
+            let mut listener = config::new().listen_on(addr).expect("listener");
 
             // Get the first address.
             let addr = futures::executor::block_on_stream(listener.by_ref())
@@ -665,6 +690,28 @@ mod tests {
         assert!(!new_addr.to_string().contains("tcp/0"));
     }
 
+    macro_rules! aw { ($e:expr) => { tokio_test::block_on($e)
+        };
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "tokio")]
+    async fn replace_port_0_in_returned_multiaddr_ipv4_tokio() {
+        let tcp = TokioTcpConfig::new();
+
+        let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
+        assert!(addr.to_string().contains("tcp/0"));
+
+        let new_addr = futures::executor::block_on_stream(tcp.listen_on(addr).unwrap())
+            .next()
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
+
+        assert!(!new_addr.to_string().contains("tcp/0"));
+    }
+
     #[test]
     #[cfg(feature = "async-std")]
     fn replace_port_0_in_returned_multiaddr_ipv6() {
@@ -683,10 +730,39 @@ mod tests {
         assert!(!new_addr.to_string().contains("tcp/0"));
     }
 
+    #[tokio::test]
+    #[cfg(feature = "tokio")]
+    async fn replace_port_0_in_returned_multiaddr_ipv6_tokio() {
+        let tcp = TokioTcpConfig::new();
+
+        let addr: Multiaddr = "/ip6/::1/tcp/0".parse().unwrap();
+        assert!(addr.to_string().contains("tcp/0"));
+
+        let new_addr = futures::executor::block_on_stream(tcp.listen_on(addr).unwrap())
+            .next()
+            .expect("some event")
+            .expect("no error")
+            .into_new_address()
+            .expect("listen address");
+
+        assert!(!new_addr.to_string().contains("tcp/0"));
+    }
+
     #[test]
     #[cfg(feature = "async-std")]
     fn larger_addr_denied() {
         let tcp = TcpConfig::new();
+
+        let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
+            .parse::<Multiaddr>()
+            .unwrap();
+        assert!(tcp.listen_on(addr).is_err());
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "tokio")]
+    async fn larger_addr_denied_tokio() {
+        let tcp = TokioTcpConfig::new();
 
         let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
             .parse::<Multiaddr>()

@@ -21,5 +21,5 @@ socket2 = "0.3.12"
 tokio = { version = "0.3", default-features = false, features = ["net"], optional = true }
 
 [dev-dependencies]
-libp2p-tcp = { path = ".", features = ["async-std"] }
-
+libp2p-tcp = { path = ".", features = ["async-std", "tokio"] }
+tokio = { version = "0.3", default-features = false, features = ["macros", "rt"]}
